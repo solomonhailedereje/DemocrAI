@@ -1,0 +1,40 @@
+# Central configuration. Every path is relative to the project root.
+
+data_dir: data
+
+scrape:
+  base_url: https://www.duebendorf.ch
+  list_path: /sitzung
+  user_agent: "DuebendorfGR-RAG/0.1 (research project, University of Zurich)"
+  delay_seconds: 1.5          # be polite to the city's server
+
+transcribe:
+  model_id: Flurin17/whisper-large-v3-turbo-swiss-german
+  # "faster-whisper" = CTranslate2, fastest on CPU (Intel Mac) and on GPU.
+  # "transformers"   = plain Hugging Face pipeline (needs torch).
+  backend: faster-whisper
+  ct2_dir: models/whisper-swiss-german-ct2   # created by `gr-rag convert-model`
+  device: auto              # auto | cpu | cuda
+  compute_type: auto        # auto -> int8 on CPU, float16 on CUDA
+  language: de
+  beam_size: 5
+  vad_filter: true          # skip silence (breaks, pauses) -> big speed-up
+
+chunking:
+  transcript_window_s: 75     # target chunk length in seconds of speech
+  transcript_overlap_s: 15
+  protokoll_max_chars: 1200
+
+retrieval:
+  ollama_url: http://localhost:11434
+  embed_model: bge-m3         # multilingual, strong on German
+  top_k: 6
+  dense_weight: 0.6           # hybrid score = w*dense + (1-w)*bm25
+  # If the best hit's cosine similarity is below this, answer "no information
+  # found" and do NOT call the LLM. Tune with `gr-rag search "..."` on real data.
+  min_score: 0.45
+
+llm:
+  model: qwen2.5:3b           # 2017 Intel Mac: 3B is usable; try qwen2.5:7b with 16 GB RAM
+  temperature: 0.0
+  num_ctx: 8192
