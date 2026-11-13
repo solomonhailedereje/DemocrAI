@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { type Chat, type Filters, type Message, type SourceType, api, ask, fmtDate } from "../api";
 import { useApp } from "../context";
+import { useLang, useT } from "../i18n";
 import * as I from "./Icons";
 import { CitedBlock } from "./Sources";
 
-const EXAMPLES = [
-  "Was wurde zum Schulraum diskutiert?",
-  "Wie hat der Gemeinderat über das Budget abgestimmt?",
-  "Was wurde zu den Velowegen gesagt?",
-  "Was wurde zur digitalen Verwaltung gesagt?",
-];
+const EXAMPLES = {
+  de: ["Was wurde zum Schulraum diskutiert?", "Wie hat der Gemeinderat über das Budget abgestimmt?",
+       "Was wurde zu den Velowegen gesagt?", "Was wurde zur digitalen Verwaltung gesagt?"],
+  en: ["What was discussed about school space?", "How did the council vote on the budget?",
+       "What was said about the cycle lanes?", "What was said about digital administration?"],
+};
 
 const TYPE_LABEL: Record<SourceType, string> = { transcript: "Video", protokoll: "Protokolle", dokument: "Dokumente" };
 
@@ -26,6 +27,8 @@ type Props = {
 
 export default function ChatThread({ chatId, meetingId, meetingTitle, initialQuestion, initialTypes, onCreated, onChanged, compactHead }: Props) {
   const { addToProject, toast } = useApp();
+  const t = useT();
+  const { lang } = useLang();
   const [chat, setChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -75,13 +78,13 @@ export default function ChatThread({ chatId, meetingId, meetingTitle, initialQue
       setMessages((m) => [...m, tmp]);
       setPending("");
       const filters: Filters = { source_types: types, date_from: dateFrom || undefined, date_to: dateTo || undefined, meeting_id: meetingId };
-      const final = await ask(c.id, q, filters, (t) => setPending((p) => (p ?? "") + t));
+      const final = await ask(c.id, q, filters, (tok) => setPending((p) => (p ?? "") + tok), lang);
       setMessages((m) => [...m, final]);
       setChat((cur) => (cur && cur.title === "Neuer Chat" ? { ...cur, title: q.slice(0, 60) } : cur));
       onChanged?.();
     } catch (e: any) {
       setError(e.message?.includes("Connection") || e.message?.includes("ollama")
-        ? "Das Sprachmodell ist nicht erreichbar. Läuft Ollama (ollama serve)?"
+        ? t("Das Sprachmodell ist nicht erreichbar. Läuft Ollama (ollama serve)?")
         : e.message);
     } finally {
       setPending(null); setBusy(false);
@@ -94,31 +97,31 @@ export default function ChatThread({ chatId, meetingId, meetingTitle, initialQue
   const saveAnswer = (m: Message, question?: string) =>
     addToProject({
       kind: "answer",
-      title: question ? `Frage: ${question}` : "Antwort",
+      title: question ? `${t("Frage")}: ${question}` : t("Antwort"),
       ref: { question, text: m.content, sources: m.sources, chat_id: chat?.id },
     });
 
   return (
     <div className="thread">
       <div className="thread-head">
-        {compactHead ?? <b>{chat?.title ?? "Neue Frage"}</b>}
-        {meetingId && <span className="chip yellow">nur {meetingTitle ?? "diese Sitzung"}</span>}
+        {compactHead ?? <b>{chat?.title ?? t("Neue Frage")}</b>}
+        {meetingId && <span className="chip yellow">{t("nur")} {meetingTitle ?? t("diese Sitzung")}</span>}
         <span className="spacer" />
-        <div className="toggle" role="group" aria-label="Quellen">
-          {(Object.keys(TYPE_LABEL) as SourceType[]).map((t) => (
-            <button key={t} className={types.includes(t) ? "on" : ""} onClick={() => toggleType(t)}>{TYPE_LABEL[t]}</button>
+        <div className="toggle" role="group" aria-label={t("Quellen")}>
+          {(Object.keys(TYPE_LABEL) as SourceType[]).map((k) => (
+            <button key={k} className={types.includes(k) ? "on" : ""} onClick={() => toggleType(k)}>{t(TYPE_LABEL[k])}</button>
           ))}
         </div>
         {!meetingId && (
-          <div className="row small">
-            <input className="input" style={{ width: 132, padding: ".25rem .4rem" }} type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title="von" />
+          <div className="row small" lang={lang === "en" ? "en-GB" : "de-CH"}>
+            <input className="input" style={{ width: 132, padding: ".25rem .4rem" }} type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} title={t("von")} />
             <span className="muted">–</span>
-            <input className="input" style={{ width: 132, padding: ".25rem .4rem" }} type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title="bis" />
+            <input className="input" style={{ width: 132, padding: ".25rem .4rem" }} type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} title={t("bis")} />
           </div>
         )}
         {chat && messages.length > 0 && (
           <button className="btn small" onClick={() => addToProject({ kind: "chat", title: `Chat: ${chat.title}`, ref: { chat_id: chat.id } })}>
-            <I.Folder /> Chat speichern
+            <I.Folder /> {t("Chat speichern")}
           </button>
         )}
       </div>
@@ -126,14 +129,13 @@ export default function ChatThread({ chatId, meetingId, meetingTitle, initialQue
       <div className="messages">
         {messages.length === 0 && pending === null && (
           <div className="stack" style={{ margin: "auto 0" }}>
-            <div className="row"><I.Sparkle /><h3>Fragen an das Ratsarchiv</h3></div>
+            <div className="row"><I.Sparkle /><h3>{t("Fragen an das Ratsarchiv")}</h3></div>
             <p className="muted" style={{ maxWidth: 640 }}>
-              Antworten stammen ausschliesslich aus den Transkripten der Sitzungsvideos, den Protokollen und den
-              Sitzungsdokumenten. Jede Aussage ist mit ihrer Quelle verlinkt; Sätze ohne Quelle werden entfernt.
+              {t("Antworten stammen ausschliesslich aus den Transkripten der Sitzungsvideos, den Protokollen und den Sitzungsdokumenten. Jede Aussage ist mit ihrer Quelle verlinkt; Sätze ohne Quelle werden entfernt.")}
             </p>
             {!meetingId && (
               <div className="examples">
-                {EXAMPLES.map((e) => <button key={e} onClick={() => send(e)}>{e}</button>)}
+                {EXAMPLES[lang].map((e) => <button key={e} onClick={() => send(e)}>{e}</button>)}
               </div>
             )}
           </div>
@@ -144,17 +146,17 @@ export default function ChatThread({ chatId, meetingId, meetingTitle, initialQue
           ) : (
             <div key={m.id} className="msg assistant">
               <div className="bubble">
-                <CitedBlock text={m.content} sources={m.sources} compact={false} />
+                <CitedBlock text={m.content} sources={m.sources} compact={false} translate={m.lang !== "en"} />
                 <div className="row" style={{ marginTop: ".5rem" }}>
-                  {!m.grounded && <span className="chip grey">keine Quelle gefunden</span>}
-                  {!!m.removed && <span className="muted small">{m.removed} Satz/Sätze ohne Quelle entfernt</span>}
+                  {!m.grounded && <span className="chip grey">{t("keine Quelle gefunden")}</span>}
+                  {!!m.removed && <span className="muted small">{t("{n} Satz/Sätze ohne Quelle entfernt", { n: m.removed })}</span>}
                   <span className="spacer" />
                   {m.grounded && (
                     <button className="btn small" onClick={() => saveAnswer(m, messages[i - 1]?.content)}>
-                      <I.Plus /> Zu Projekt
+                      <I.Plus /> {t("Zu Projekt")}
                     </button>
                   )}
-                  <button className="btn small ghost" onClick={() => { navigator.clipboard?.writeText(m.content); toast("Antwort kopiert"); }}>Kopieren</button>
+                  <button className="btn small ghost" onClick={() => { navigator.clipboard?.writeText(m.content); toast(t("Antwort kopiert")); }}>{t("Kopieren")}</button>
                 </div>
               </div>
             </div>
@@ -162,7 +164,7 @@ export default function ChatThread({ chatId, meetingId, meetingTitle, initialQue
         )}
         {pending !== null && (
           <div className="msg assistant"><div className="bubble">
-            {pending ? <span className="typing">{pending}</span> : <span className="typing">Suche in Transkripten und Protokollen </span>}
+            {pending ? <span className="typing">{pending}</span> : <span className="typing">{t("Suche in Transkripten und Protokollen")} </span>}
           </div></div>
         )}
         {error && <div className="notice error">{error}</div>}
@@ -170,12 +172,12 @@ export default function ChatThread({ chatId, meetingId, meetingTitle, initialQue
       </div>
 
       <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
-        <textarea className="textarea" rows={1} placeholder="Ihre Frage …" value={input} disabled={busy}
+        <textarea className="textarea" rows={1} placeholder={t("Ihre Frage …")} value={input} disabled={busy}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />
-        <button className="btn primary" disabled={busy || !input.trim()}>Fragen</button>
+        <button className="btn primary" disabled={busy || !input.trim()}>{t("Fragen")}</button>
       </form>
-      {dateFrom || dateTo ? <div className="muted small" style={{ padding: "0 1rem .5rem" }}>Zeitraum: {fmtDate(dateFrom) || "…"} – {fmtDate(dateTo) || "…"}</div> : null}
+      {dateFrom || dateTo ? <div className="muted small" style={{ padding: "0 1rem .5rem" }}>{t("Zeitraum")}: {fmtDate(dateFrom) || "…"} – {fmtDate(dateTo) || "…"}</div> : null}
     </div>
   );
 }

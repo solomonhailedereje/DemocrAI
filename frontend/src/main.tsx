@@ -9,6 +9,7 @@ import Login from "./pages/Login";
 import Planen from "./pages/Planen";
 import Sitzung from "./pages/Sitzung";
 import Sitzungen from "./pages/Sitzungen";
+import { LangProvider } from "./i18n";
 import "./styles.css";
 
 function App() {
@@ -41,5 +42,5 @@ function App() {
 }
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode><BrowserRouter><App /></BrowserRouter></StrictMode>,
+  <StrictMode><LangProvider><BrowserRouter><App /></BrowserRouter></LangProvider></StrictMode>,
 );

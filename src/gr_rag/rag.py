@@ -22,6 +22,14 @@ from .index import Hit, Retriever, tokenize
 
 NO_INFO = ("Dazu finde ich in den Transkripten und Protokollen der Gemeinderatssitzungen "
            "keine Angaben.")
+NO_INFO_EN = ("I could not find any information on this in the transcripts and minutes of the "
+              "council meetings.")
+REFUSALS = {"de": NO_INFO, "en": NO_INFO_EN}
+LANG_RULE = {
+    "en": ("\n\nANSWER IN ENGLISH. The excerpts are German: translate faithfully, keep names, numbers and "
+           "business numbers unchanged, and still cite [n] after every sentence. If the excerpts do not "
+           f'answer the question, reply exactly: "{NO_INFO_EN}"'),
+}
 
 SYSTEM_PROMPT = f"""Du bist ein Auskunftssystem zu den Sitzungen des Gemeinderats Dübendorf.
 
@@ -70,8 +78,9 @@ def format_context(hits: list[Hit]) -> str:
     return "\n\n".join(blocks)
 
 
-def _messages(question: str, hits: list[Hit], history: list[dict] | None = None) -> list[dict]:
-    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+def _messages(question: str, hits: list[Hit], history: list[dict] | None = None,
+              lang: str | None = None) -> list[dict]:
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT + LANG_RULE.get(lang or "", "")}]
     # Earlier turns help resolve follow-ups ("und was sagte die SVP dazu?"),
     # but facts must still come from the excerpts of THIS turn.
     for h in (history or [])[-4:]:
@@ -112,11 +121,12 @@ def _overlap(sentence: str, text: str) -> float:
     return len(s & set(tokenize(text))) / len(s) if s else 1.0
 
 
-def validate(raw: str, hits: list[Hit]) -> Answer:
+def validate(raw: str, hits: list[Hit], lang: str | None = None) -> Answer:
     """Keep only cited sentences that point at real excerpts; renumber sources."""
     raw = raw.strip()
-    if not raw or NO_INFO[:40] in raw:
-        return Answer(NO_INFO, grounded=False, retrieved=hits)
+    refusal = REFUSALS.get(lang or "de", NO_INFO)
+    if not raw or any(r[:40] in raw for r in REFUSALS.values()):
+        return Answer(refusal, grounded=False, retrieved=hits)
 
     kept, removed, used = [], [], []          # kept: (line_no, sentence, valid_citations)
     for line_no, line in enumerate(l for l in raw.splitlines() if l.strip()):
@@ -134,14 +144,15 @@ def validate(raw: str, hits: list[Hit]) -> Answer:
             kept.append((line_no, sent, valid))
 
     if not kept:
-        return Answer(NO_INFO, grounded=False, removed_sentences=removed, retrieved=hits)
+        return Answer(refusal, grounded=False, removed_sentences=removed, retrieved=hits)
 
     renum = {old: new for new, old in enumerate(used, 1)}
     support = {n: [] for n in used}
     lines: dict[int, list[str]] = {}
     for line_no, sent, valid in kept:
         for n in valid:
-            support[n].append(_overlap(sent, hits[n - 1].chunk["text"]))
+            # word-overlap check only works when answer and excerpt share a language (German)
+            support[n].append(_overlap(sent, hits[n - 1].chunk["text"]) if (lang or "de") == "de" else 1.0)
         sent = CITE_RE.sub(lambda m: f"[{renum[int(m.group(1))]}]" if int(m.group(1)) in renum else "", sent)
         lines.setdefault(line_no, []).append(sent)
 
@@ -162,23 +173,25 @@ class RAG:
             return []
         return hits
 
-    def stream(self, question: str, history: list[dict] | None = None, **filters) -> Iterator[str | Answer]:
+    def stream(self, question: str, history: list[dict] | None = None, lang: str | None = None,
+               **filters) -> Iterator[str | Answer]:
         """Yields raw tokens while generating, then a final validated Answer."""
         # For follow-up questions, retrieve with the previous question as extra context
         prev = [h["content"] for h in (history or []) if h["role"] == "user"][-1:]
         hits = self.retrieve(" ".join(prev + [question]), **filters)
         if not hits:
-            yield Answer(NO_INFO, grounded=False)
+            yield Answer(REFUSALS.get(lang or "de", NO_INFO), grounded=False)
             return
         raw = ""
-        for tok in self.chat_fn(_messages(question, hits, history)):
+        for tok in self.chat_fn(_messages(question, hits, history, lang)):
             raw += tok
             yield tok
-        yield validate(raw, hits)
+        yield validate(raw, hits, lang)
 
-    def ask(self, question: str, history: list[dict] | None = None, **filters) -> Answer:
+    def ask(self, question: str, history: list[dict] | None = None, lang: str | None = None,
+            **filters) -> Answer:
         final = None
-        for item in self.stream(question, history, **filters):
+        for item in self.stream(question, history, lang, **filters):
             if isinstance(item, Answer):
                 final = item
         return final

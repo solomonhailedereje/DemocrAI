@@ -36,12 +36,22 @@ FILLER = STOPWORDS | set("""wurde wurden werden worden diskutiert gesagt sagt ga
 welches haben hatte sein seine ihre wird soll sollte über unter beim zum zur vom heute morgen sowie dazu""".split())
 
 
+# The real embedding model (bge-m3) is multilingual; the demo's keyword "embedder" is not,
+# so English questions are mapped to German keywords first.
+EN_DE = {"school": "schulraum", "space": "schulraum", "pupils": "schülerzahlen", "budget": "budget",
+         "vote": "stimmen", "voted": "stimmen", "cycle": "velowege", "bike": "velowege", "lanes": "velowege",
+         "parking": "parkplätze", "digital": "digitale", "administration": "verwaltung", "forms": "formulare",
+         "heat": "hitzeschutz", "playgrounds": "pausenplätze", "tax": "steuerfuss", "council": "gemeinderat",
+         "postulate": "postulat", "motion": "motion", "credit": "kredit", "trees": "bäume"}
+
+
 def hash_embed(texts: list[str]) -> np.ndarray:
     """Hashed bag of stems + 5-letter prefixes (catches German compounds like Schulraum/Schulraumplanung).
     Lexical similarity only, but deterministic and offline."""
     out = np.zeros((len(texts), DIM), dtype=np.float32)
     for i, t in enumerate(texts):
         for w in re.findall(r"[a-zäöüß]{3,}", t.lower()):
+            w = EN_DE.get(w, w)
             if w in FILLER:
                 continue
             for key in {_stem(w), "p:" + w[:5]}:
@@ -54,7 +64,8 @@ def extractive_chat(messages: list[dict], delay: float = 0.012):
     """Answer by quoting the first sentence of the most relevant excerpts, with citations."""
     user = messages[-1]["content"]
     question = user.split("FRAGE:", 1)[-1]
-    q = set(_stem(w) for w in re.findall(r"[a-zäöüß]{4,}", question.lower()))
+    q = set(_stem(EN_DE.get(w, w)) for w in re.findall(r"[a-zäöüß]{4,}", question.lower())
+            if EN_DE.get(w, w) not in FILLER)
     blocks = re.findall(r"^\[(\d+)\][^\n]*\n(.+?)(?=\n\n\[\d+\]|\n\nFRAGE:|\Z)", user, flags=re.S | re.M)
     wants_votes = question.lstrip().startswith("Liste")   # only the outcomes task
     vote_re = re.compile(r"\d+ zu \d+|einstimmig|erledigt|genehmigt|angenommen|überwiesen", re.I)
@@ -71,17 +82,59 @@ def extractive_chat(messages: list[dict], delay: float = 0.012):
     scored.sort(reverse=True)
     picked, seen = [], set()
     for ov, _, s, n in scored:
-        if s in seen or (picked and ov == 0):
+        if s in seen or ov == 0:          # like a real model: no overlap with the question -> don't use it
             continue
         picked.append(f"{s.rstrip('.')} [{n}].")
         seen.add(s)
         if len(picked) == 3:
             break
-    answer = " ".join(picked) if picked else ("Dazu finde ich in den Transkripten und Protokollen der "
-                                               "Gemeinderatssitzungen keine Angaben.")
+    english = "ANSWER IN ENGLISH" in messages[0]["content"]
+    if picked:
+        answer = " ".join(picked)
+        if english:
+            for de, en in GLOSSARY:
+                answer = answer.replace(de, en)
+    else:
+        answer = ("I could not find any information on this in the transcripts and minutes of the council meetings."
+                  if english else
+                  "Dazu finde ich in den Transkripten und Protokollen der Gemeinderatssitzungen keine Angaben.")
     for tok in re.findall(r"\S+\s*", answer):
         time.sleep(delay)
         yield tok
+
+
+GLOSSARY = [
+    ("Demo-Sitzung des Gemeinderates", "demo meeting of the Municipal Council"),
+    ("Sitzung des Gemeinderates", "meeting of the Municipal Council"), ("Gemeinderätin", "Councillor"),
+    ("Gemeinderat", "Municipal Council"), ("Stadtrat", "City Councillor"), ("Fraktion", "Group"),
+    ("Mitteilungen", "Announcements"), ("Wir kommen zu Traktandum", "We now come to agenda item"),
+    ("Traktandum", "Agenda item"), ("Beantwortung", "Response"), ("Abschreibung", "Write-off"),
+    ("Postulat", "Postulate"), ("Interpellation", "Interpellation"), ("Motion", "Motion"),
+    ("Kredit für sichere Velowege an der Seestrasse", "Credit for safe cycle lanes on Seestrasse"),
+    ("Schulraum für wachsende Quartiere", "School space for growing neighbourhoods"),
+    ("Hitzeschutz auf Pausenplätzen", "Heat protection in school playgrounds"),
+    ("Digitale Verwaltung ohne Papierformulare", "Digital administration without paper forms"),
+    ("Budget 2027 der Stadt", "City budget 2027"), (" sagt, ", " says "), (" erklärt, ", " explains "),
+    (" betont, ", " stresses "), (" fragt, ", " asks "), (" antwortet, ", " answers "),
+    (" kritisiert, ", " criticises "), (" beantragt, ", " moves "), (" fordert, ", " demands "),
+    (" befürchtet, ", " fears "), (" unterstützt ", " supports "), (" mit ", " with "),
+    (" zu ", " to "), (" Stimmen", " votes"), ("angenommen", "approved"), ("genehmigt", "approved"),
+    ("einstimmig", "unanimously"), ("Der ", "The "), ("Die ", "The "), ("Das ", "The "), (" und ", " and "),
+    (" wird ", " is "), (" ist ", " is "), (" der ", " the "), (" die ", " the "), (" das ", " the "),
+    ("Millionen Franken", "million francs"), ("Schülerzahlen", "pupil numbers"), ("Parkplätze", "parking spaces"),
+]
+
+
+def demo_translate_chat(messages: list[dict]):
+    """Glossary 'translation' for the offline demo only (no language model available).
+    Keeps the ### n block format and [n] markers, like the real translator."""
+    body = messages[-1]["content"]
+    out = []
+    for num, text in re.findall(r"^###\s*(\d+)\s*\n(.*?)(?=\n###\s*\d+\s*\n|\Z)", body, flags=re.S | re.M):
+        for de, en in GLOSSARY:
+            text = text.replace(de, en)
+        out.append(f"### {num}\n{text.strip()}")
+    yield "\n".join(out)
 
 
 # --------------------------------------------------------------------------- fictional content
@@ -251,4 +304,4 @@ def demo_app():
         rag.min_score = 0.12
         return rag
 
-    return create_app(rag_factory=factory)
+    return create_app(rag_factory=factory, translate_fn=demo_translate_chat)

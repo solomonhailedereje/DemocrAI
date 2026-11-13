@@ -41,6 +41,12 @@ class Filters(BaseModel):
 class AskIn(BaseModel):
     content: str
     filters: Filters | None = None
+    lang: str | None = None          # "en" -> answer in English
+
+
+class TranslateIn(BaseModel):
+    texts: list[str]
+    target: str = "en"
 
 
 class ChatIn(BaseModel):
@@ -121,9 +127,13 @@ def answer_view(ans: Answer) -> dict:
 
 # --------------------------------------------------------------------------- app factory
 
-def create_app(store: Store | None = None, rag_factory=None) -> FastAPI:
+def create_app(store: Store | None = None, rag_factory=None, translate_fn=None) -> FastAPI:
+    """translate_fn: optional chat function used for translation (defaults to the RAG's LLM)."""
+    from .translate import TranslationCache, translate
+
     app = FastAPI(title="DemocrAI Ratsarchiv API")
     app.state.store = store or Store(paths().db)
+    app.state.tcache = TranslationCache(paths().data / "translations.db")
     app.state.rag = None
     rag_factory = rag_factory or RAG
 
@@ -226,6 +236,17 @@ def create_app(store: Store | None = None, rag_factory=None) -> FastAPI:
         rag = get_rag()
         return doc_summary(rag.retriever, did, rag.chat_fn, refresh=refresh)
 
+    # ------------------------------------------------------------------ translation
+    @app.post("/api/translate")
+    def do_translate(body: TranslateIn, u: dict = Depends(user)):
+        if body.target not in ("en", "de", "fr", "it"):
+            raise HTTPException(400, "unsupported language")
+        if len(body.texts) > 60 or sum(len(t) for t in body.texts) > 30000:
+            raise HTTPException(413, "too much text in one request")
+        fn = translate_fn or get_rag().chat_fn
+        texts, ok = translate(body.texts, body.target, app.state.tcache, fn)
+        return {"texts": texts, "ok": ok}
+
     # ------------------------------------------------------------------ chats
     @app.get("/api/chats")
     def list_chats(u: dict = Depends(user)):
@@ -261,14 +282,15 @@ def create_app(store: Store | None = None, rag_factory=None) -> FastAPI:
         f = body.filters or Filters()
         meeting_id = f.meeting_id or chat.get("meeting_id")
         history = [{"role": m["role"], "content": m["content"]} for m in chat["messages"]]
-        S().add_message(cid, "user", body.content)
+        lang = body.lang if body.lang in ("de", "en") else "de"
+        S().add_message(cid, "user", body.content, lang=lang)
         if not chat["messages"] and chat["title"] == "Neuer Chat":
             S().rename_chat(u["id"], cid, body.content[:60])
 
         def gen() -> Iterator[str]:
             final = None
             try:
-                for item in rag.stream(body.content, history,
+                for item in rag.stream(body.content, history, body.lang,
                                        source_types=set(f.source_types) if f.source_types else None,
                                        date_from=f.date_from, date_to=f.date_to,
                                        meeting_ids={meeting_id} if meeting_id else None):
@@ -280,7 +302,7 @@ def create_app(store: Store | None = None, rag_factory=None) -> FastAPI:
                 yield json.dumps({"type": "error", "message": f"{type(e).__name__}: {e}"}) + "\n"
                 return
             view = answer_view(final)
-            msg = S().add_message(cid, "assistant", view["text"], view["sources"], view["grounded"])
+            msg = S().add_message(cid, "assistant", view["text"], view["sources"], view["grounded"], lang)
             yield json.dumps({"type": "final", "message": {**msg, "removed": view["removed"]}}) + "\n"
 
         return StreamingResponse(gen(), media_type="application/x-ndjson")

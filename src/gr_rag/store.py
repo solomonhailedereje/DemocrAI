@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS chats (
 CREATE TABLE IF NOT EXISTS messages (
   id INTEGER PRIMARY KEY, chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
   role TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL DEFAULT '[]',
-  grounded INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL);
+  grounded INTEGER NOT NULL DEFAULT 1, lang TEXT NOT NULL DEFAULT 'de', created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'Allgemein', description TEXT NOT NULL DEFAULT '',
@@ -70,6 +70,9 @@ class Store:
         self.path = str(path)
         with self._conn() as c:
             c.executescript(SCHEMA)
+            cols = {r[1] for r in c.execute("PRAGMA table_info(messages)")}
+            if "lang" not in cols:   # databases created before the language option
+                c.execute("ALTER TABLE messages ADD COLUMN lang TEXT NOT NULL DEFAULT 'de'")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path, check_same_thread=False)
@@ -146,13 +149,13 @@ class Store:
         self._exec("DELETE FROM chats WHERE id=? AND user_id=?", (chat_id, user_id))
 
     def add_message(self, chat_id: int, role: str, content: str, sources: list | None = None,
-                    grounded: bool = True) -> dict:
+                    grounded: bool = True, lang: str = "de") -> dict:
         t = now()
-        mid = self._exec("INSERT INTO messages(chat_id,role,content,sources,grounded,created) VALUES(?,?,?,?,?,?)",
-                         (chat_id, role, content, json.dumps(sources or [], ensure_ascii=False), int(grounded), t))
+        mid = self._exec("INSERT INTO messages(chat_id,role,content,sources,grounded,lang,created) VALUES(?,?,?,?,?,?,?)",
+                         (chat_id, role, content, json.dumps(sources or [], ensure_ascii=False), int(grounded), lang, t))
         self._exec("UPDATE chats SET updated=? WHERE id=?", (t, chat_id))
         return {"id": mid, "chat_id": chat_id, "role": role, "content": content, "sources": sources or [],
-                "grounded": grounded, "created": t}
+                "grounded": grounded, "lang": lang, "created": t}
 
     # ---- projects
     def create_project(self, user_id: int, title: str, category: str = "Allgemein", description: str = "") -> dict:

@@ -47,3 +47,26 @@ def test_demo_end_to_end(tmp_path, monkeypatch):
     doc = next(d for d in m["documents"] if d["doc_type"] == "PO")
     ds = c.post(f"/api/documents/{doc['doc_id']}/summary").json()
     assert ds["blocks"] and ds["blocks"][0]["sources"]
+
+
+def test_demo_english(tmp_path):
+    from gr_rag.demo import build_demo, demo_translate_chat, extractive_chat, hash_embed
+    from gr_rag.api import create_app
+    from gr_rag.index import Retriever
+    from gr_rag.rag import RAG
+
+    build_demo(tmp_path)
+
+    def factory():
+        rag = RAG(Retriever(embed_fn=hash_embed), chat_fn=lambda m: extractive_chat(m, delay=0))
+        rag.min_score = 0.12
+        return rag
+
+    c = TestClient(create_app(rag_factory=factory, translate_fn=demo_translate_chat))
+    c.post("/api/auth/login", json={"email": "demo@example.org", "password": "demo1234"})
+    tr = c.post("/api/translate", json={"texts": ["Der Kredit wird mit 22 zu 12 Stimmen angenommen [1]."]}).json()
+    assert tr["ok"] == [True] and "[1]" in tr["texts"][0] and "votes" in tr["texts"][0]
+    chat = c.post("/api/chats", json={}).json()
+    ev = [json.loads(l) for l in c.post(f"/api/chats/{chat['id']}/messages",
+                                        json={"content": "What about the weather tomorrow?", "lang": "en"}).text.splitlines()]
+    assert ev[-1]["message"]["content"].startswith("I could not find")

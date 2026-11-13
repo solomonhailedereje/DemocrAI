@@ -4,6 +4,7 @@ import { api } from "../api";
 import ChatThread from "../components/ChatThread";
 import * as I from "../components/Icons";
 import type { ShellCtx } from "../components/Layout";
+import { useT } from "../i18n";
 
 export default function Fragen() {
   const { id } = useParams();
@@ -12,6 +13,7 @@ export default function Fragen() {
   const loc = useLocation();
   const { refreshChats } = useOutletContext<ShellCtx>();
   const fresh = (loc.state as any)?.fresh;
+  const t = useT();
   // Keep the same thread mounted when the URL changes only because this thread just created its chat
   const created = useRef<number | null>(null);
   const [threadKey, setThreadKey] = useState(() => String(chatId ?? `new-${fresh ?? ""}`));
@@ -22,7 +24,7 @@ export default function Fragen() {
   }, [chatId, fresh]);
 
   async function remove() {
-    if (!chatId || !confirm("Diesen Chat löschen?")) return;
+    if (!chatId || !confirm(t("Diesen Chat löschen?"))) return;
     await api.deleteChat(chatId);
     refreshChats();
     nav("/fragen", { state: { fresh: Date.now() } });
@@ -31,12 +33,11 @@ export default function Fragen() {
   return (
     <div className="page-narrow">
       <div className="row" style={{ alignItems: "flex-start" }}>
-        <h1 style={{ flex: 1 }}>Fragen</h1>
-        <button className="btn" onClick={() => nav("/fragen", { state: { fresh: Date.now() } })}><I.Plus /> Neuer Chat</button>
-        {chatId && <button className="btn" onClick={remove}><I.Trash /> Löschen</button>}
+        <h1 style={{ flex: 1 }}>{t("Fragen")}</h1>
+        <button className="btn" onClick={() => nav("/fragen", { state: { fresh: Date.now() } })}><I.Plus /> {t("Neuer Chat")}</button>
+        {chatId && <button className="btn" onClick={remove}><I.Trash /> {t("Löschen")}</button>}
       </div>
-      <p>Stellen Sie Fragen in eigenen Worten. Die Antworten stammen ausschliesslich aus den Videotranskripten,
-         Protokollen und Dokumenten – jede Aussage mit Quelle.</p>
+      <p>{t("Stellen Sie Fragen in eigenen Worten. Die Antworten stammen ausschliesslich aus den Videotranskripten, Protokollen und Dokumenten – jede Aussage mit Quelle.")}</p>
       <ChatThread key={threadKey} chatId={chatId}
                   onCreated={(c) => { created.current = c.id; nav(`/fragen/${c.id}`, { replace: true }); }}
                   onChanged={refreshChats} />

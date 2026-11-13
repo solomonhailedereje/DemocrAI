@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { type Chapter, type Segment, fmtTs } from "../api";
 import { useApp } from "../context";
+import { Tx, useContentTranslation, useLang, useT } from "../i18n";
 import * as I from "./Icons";
 
 export type VideoHandle = { seek: (t: number) => void };
@@ -25,6 +26,12 @@ type Props = { videoId: string | null; segments: Segment[] | null; chapters: Cha
 const VideoTranscript = forwardRef<VideoHandle, Props>(function VideoTranscript(
   { videoId, segments, chapters, meetingId, meetingTitle, date, startAt }, ref) {
   const { addToProject } = useApp();
+  const t = useT();
+  const { lang } = useLang();
+  const [translateOn, setTranslateOn] = useState(false);
+  const segTexts = useMemo(() => (segments ?? []).map((x) => x.text), [segments]);
+  const { tr, pending: trPending } = useContentTranslation(segTexts, translateOn);
+  const trDone = translateOn ? segTexts.filter((x) => tr(x) !== x).length : 0;
   const holder = useRef<HTMLDivElement>(null);
   const player = useRef<YT.Player | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -101,42 +108,51 @@ const VideoTranscript = forwardRef<VideoHandle, Props>(function VideoTranscript(
     <div className="video-grid">
       <div>
         <div className="video-box">
-          {videoId ? <div ref={holder} /> : <div className="video-placeholder">Für diese Sitzung ist kein Video verfügbar.</div>}
+          {videoId ? <div ref={holder} /> : <div className="video-placeholder">{t("Für diese Sitzung ist kein Video verfügbar.")}</div>}
         </div>
         <div className="row small muted" style={{ marginTop: ".4rem" }}>
           <span className="ts">{fmtTs(now)}</span>
           <span className="spacer" />
-          {videoId && <a href={`https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(now)}s`} target="_blank" rel="noreferrer"><I.External /> Auf YouTube öffnen</a>}
+          {videoId && <a href={`https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(now)}s`} target="_blank" rel="noreferrer"><I.External /> {t("Auf YouTube öffnen")}</a>}
         </div>
       </div>
 
       <div className="transcript">
         <div className="transcript-tools">
           <I.Search />
-          <input className="input" style={{ padding: ".25rem .5rem" }} placeholder="Im Transkript filtern" value={filter} onChange={(e) => setFilter(e.target.value)} />
-          <label className="row small" title="Transkript folgt dem Video"><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> folgen</label>
+          <input className="input" style={{ padding: ".25rem .5rem" }} placeholder={t("Im Transkript filtern")} value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <label className="row small" title={t("Transkript folgt dem Video")}><input type="checkbox" checked={follow} onChange={(e) => setFollow(e.target.checked)} /> {t("folgen")}</label>
+          {lang === "en" && segments && (
+            <button className={`btn small ${translateOn ? "primary" : ""}`} onClick={() => setTranslateOn(!translateOn)}
+                    title="Machine translation; the German transcript stays available">
+              <I.Globe /> {translateOn ? (trPending ? `EN ${Math.round((100 * trDone) / Math.max(1, segTexts.length))}%` : "EN") : "Translate"}
+            </button>
+          )}
         </div>
         <div className="transcript-body" ref={bodyRef} data-selectable>
-          {!segments && <div className="empty">Noch kein Transkript für diese Sitzung.</div>}
+          {!segments && <div className="empty">{t("Noch kein Transkript für diese Sitzung.")}</div>}
           {segments?.map((s, i) => {
             if (f && !s.text.toLowerCase().includes(f)) return null;
             const ch = chapterAt.get(i);
             return (
               <div key={i}>
-                {ch && !f && <div className="chapter-mark">Traktandum {ch.number}: {ch.title.slice(0, 70)}</div>}
+                {ch && !f && <div className="chapter-mark">{t("Traktandum")} {ch.number}: <Tx>{ch.title}</Tx></div>}
                 <div className={`seg ${i === nowIdx ? "now" : ""} ${f ? "match" : ""}`} data-i={i} onClick={() => seek(s.start)}
                      onDoubleClick={() => addToProject({ kind: "excerpt", title: `Video: ${meetingTitle} – ${fmtTs(s.start)}`,
                        ref: { source_type: "transcript", meeting_id: meetingId, meeting_title: meetingTitle, date, start: s.start, end: s.end, text: s.text,
                               url: videoId ? `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(s.start)}s` : undefined } })}>
                   <span className="ts">{fmtTs(s.start)}</span>
-                  <span>{f ? highlight(s.text, f) : s.text}</span>
+                  <span>
+                    {f ? highlight(s.text, f) : translateOn && tr(s.text) !== s.text ? tr(s.text) : s.text}
+                    {translateOn && !f && tr(s.text) !== s.text && <span className="orig">{s.text}</span>}
+                  </span>
                 </div>
               </div>
             );
           })}
         </div>
         <div className="muted small" style={{ padding: ".35rem .6rem", borderTop: "1px solid var(--line)" }}>
-          Klick: zur Stelle springen · Doppelklick: Stelle zu Projekt · Text markieren: im Archiv suchen
+          {t("Klick: zur Stelle springen · Doppelklick: Stelle zu Projekt · Text markieren: im Archiv suchen")}
         </div>
       </div>
     </div>

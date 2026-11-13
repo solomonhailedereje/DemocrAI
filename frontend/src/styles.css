@@ -295,3 +295,12 @@ main.content { flex: 1; min-width: 0; padding-bottom: 72px; }
   .tiles, .home-grid, .video-grid, .project-grid, .footer-cols { grid-template-columns: 1fr; }
   .util .label-text { display: none; }
 }
+
+/* ------------------------------------------------------------ translation */
+.lang-switch { display: inline-flex; border: 1px solid var(--btn); }
+.lang-switch button { border: 0; background: #fff; padding: 1px 9px; font-size: 14px; font-weight: 600; letter-spacing: .05em; }
+.lang-switch button.on { background: var(--black); color: #fff; }
+.mt-note { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.linklike { border: 0; background: none; padding: 0; text-decoration: underline; color: var(--black); font-size: inherit; }
+.source-text.translated { border-top: 1px dashed var(--line); padding-top: 6px; font-style: italic; }
+.seg .orig { display: block; font-size: 13px; color: var(--muted); font-style: italic; }

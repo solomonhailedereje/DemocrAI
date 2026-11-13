@@ -62,7 +62,7 @@ export type DocSummary = {
 
 export type Message = {
   id: number; role: "user" | "assistant"; content: string; sources: Source[];
-  grounded: boolean; created: string; removed?: number;
+  grounded: boolean; created: string; removed?: number; lang?: "de" | "en";
 };
 
 export type Chat = {
@@ -153,11 +153,12 @@ export const api = {
 };
 
 /** Stream an answer: calls onToken for raw text, resolves with the final validated message. */
-export async function ask(chatId: number, content: string, filters: Filters, onToken: (t: string) => void): Promise<Message> {
+export async function ask(chatId: number, content: string, filters: Filters, onToken: (t: string) => void,
+                          lang: "de" | "en" = "de"): Promise<Message> {
   const r = await fetch(`/api/chats/${chatId}/messages`, {
     method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ content, filters }),
+    body: JSON.stringify({ content, filters, lang }),
   });
   if (!r.ok || !r.body) {
     let msg = r.statusText;

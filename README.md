@@ -134,6 +134,16 @@ city-style tables, grey footer, and **Font Awesome 4.7** icons. The font and ico
 locally. The city's coat of arms/logo and photos are deliberately *not* used, and the app says it is not an official
 city service. If the city adopts the tool, get its approval and official brand assets before going public.
 
+**Languages (DE / EN):** the switch in the header changes the language of
+- the interface (all labels; `frontend/src/i18n-en.ts`),
+- AI answers (the model answers in English and still cites [n] after every sentence),
+- generated content: summaries, outcomes, chapters, agenda titles and document summaries are machine-translated on demand,
+- transcripts and excerpts: "Translate" buttons; the German original stays visible underneath.
+
+Translations reuse the local LLM (`POST /api/translate`), are cached in `data/translations.db`, and are
+rejected (German original shown) if a citation marker [n] is lost. German stays authoritative. In the
+demo, translation is a crude word glossary because there is no language model.
+
 Pages (from the paper sketches):
 
 | Page | What it does |

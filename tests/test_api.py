@@ -151,3 +151,63 @@ def test_align_chapters_monotonic_and_uses_announcements():
     assert [c["start"] for c in ch] == [0.0, 120, 300]
     assert [c["confidence"] for c in ch] == ["estimated", "announced", "announced"]
     assert ch[0]["end"] == 120 and ch[-1]["end"] == 420
+
+
+# ---------------------------------------------------------------- translation
+
+def test_translation_keeps_citations_and_caches(tmp_path):
+    from gr_rag.translate import TranslationCache, markers_ok, parse_blocks, translate
+
+    calls = []
+
+    def fake(msgs):
+        calls.append(1)
+        body = msgs[-1]["content"]
+        yield body.replace("Der Kredit wurde angenommen", "The credit was approved") \
+                  .replace("Ohne Quelle [2]", "Without source")   # drops a marker -> must be rejected
+
+    cache = TranslationCache(tmp_path / "t.db")
+    texts = ["Der Kredit wurde angenommen [1].", "Ohne Quelle [2]", ""]
+    out, ok = translate(texts, "en", cache, fake)
+    assert out[0] == "The credit was approved [1]." and ok[0]
+    assert out[1] == "Ohne Quelle [2]" and not ok[1]            # original kept, flagged
+    assert ok[2]
+    translate(texts[:1], "en", cache, fake)
+    assert len(calls) == 1                                       # cached
+    assert markers_ok("a [1][2]", "b [2][1]") and not markers_ok("a [1]", "b")
+    assert parse_blocks("### 1\nA\n### 2\nB", 2) == ["A", "B"]
+
+
+def test_translate_endpoint_and_english_answers(client):
+    login(client)
+    r = client.post("/api/translate", json={"texts": ["Hallo [1]."], "target": "en"})
+    assert r.status_code == 200 and len(r.json()["texts"]) == 1
+    assert client.post("/api/translate", json={"texts": ["x"], "target": "xx"}).status_code == 400
+    chat = client.post("/api/chats", json={}).json()
+    r = client.post(f"/api/chats/{chat['id']}/messages", json={"content": "Wetter?", "lang": "en"})
+    assert json.loads(r.text.splitlines()[-1])["type"] == "final"
+
+
+def test_english_refusal():
+    from gr_rag.rag import NO_INFO_EN, RAG
+    from test_pipeline import make_retriever
+    rag = RAG(make_retriever(), chat_fn=lambda m: iter(["x"]))
+    rag.min_score = 0.99
+    assert rag.ask("Weather tomorrow?", lang="en").text == NO_INFO_EN
+
+
+def test_english_answers_not_flagged_for_low_overlap():
+    from gr_rag.index import Hit
+    from gr_rag.rag import validate
+    from test_pipeline import CHUNKS
+    hits = [Hit(c, 1.0, 0.9) for c in CHUNKS]
+    assert validate("The council discussed the merger [1].", hits, "en").sources[0].support == 1.0
+    assert validate("Völlig andere Wörter hier [1].", hits, "de").sources[0].support < 0.3
+
+
+def test_message_language_stored(client):
+    login(client)
+    chat = client.post("/api/chats", json={}).json()
+    client.post(f"/api/chats/{chat['id']}/messages", json={"content": "Einheitsgemeinde?", "lang": "en"})
+    msgs = client.get(f"/api/chats/{chat['id']}").json()["messages"]
+    assert [m["lang"] for m in msgs] == ["en", "en"]

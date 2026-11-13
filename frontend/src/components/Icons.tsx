@@ -38,3 +38,5 @@ export const Wordmark = () => (
     <span className="wordmark-sub">DemocrAI · Gemeinderat Dübendorf</span>
   </span>
 );
+export const Globe = fa("globe");
+export const Language = fa("language");
