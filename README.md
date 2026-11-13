@@ -39,7 +39,7 @@ The prompt asks the model to stay grounded, and the code enforces it in three pl
    answer becomes the refusal. Only the excerpts actually cited are shown, renumbered.
    Low word-overlap between a sentence and its source is flagged in the UI.
 
-## Setup (macOS, also Intel Macs)
+## Setup
 
 ```bash
 # Python 3.10–3.12
@@ -67,17 +67,17 @@ gr-rag add-user anna@duebendorf.ch "Anna Muster"
 gr-rag serve                       # http://localhost:8000
 ```
 
-## Transcription on a 2017 Intel MacBook
+## Transcription hardware
 
-It works, but slowly. The model runs on the CPU with `faster-whisper` (int8,
-with voice-activity detection that skips silence and breaks). Expect roughly **0.5–2×
-realtime**: a 3-hour meeting takes about 2–6 hours, and the full archive takes several days of
-running overnight. Progress is saved every 2 minutes, and re-running continues where it stopped.
+A GPU is strongly recommended. On a CPU, `faster-whisper` (int8, with voice-activity detection that
+skips silence and breaks) runs at roughly **0.5–2× realtime**, so the full archive would take days.
+Transcription is resumable either way: progress is saved every 2 minutes and a re-run continues
+where it stopped.
 
 ### UZH ScienceCluster (recommended)
 
 ```bash
-# on your Mac
+# on your computer
 scp duebendorf-gr-rag.zip <shortname>@cluster.s3it.uzh.ch:~/
 ssh <shortname>@cluster.s3it.uzh.ch
 # on the cluster (put it on your larger data storage if $HOME quota is tight)
@@ -85,21 +85,22 @@ unzip duebendorf-gr-rag.zip && cd duebendorf-gr-rag
 bash cluster/setup.sh                 # env, scrape, audio, model weights (login node, has internet)
 sbatch cluster/transcribe.slurm       # GPU job: convert model + transcribe, ~3-5 h
 squeue -u $USER; tail -f logs/gr-whisper-*.out
-# afterwards, on your Mac:
+# afterwards, on your computer:
 scp -r <shortname>@cluster.s3it.uzh.ch:~/duebendorf-gr-rag/data/transcripts data/
 ```
 
-**Otherwise, transcribe on another GPU and run everything else on the Mac.**
+**Alternatively, transcribe on another GPU and run everything else locally.**
 `notebooks/transcribe_colab.ipynb` does this on a free Colab T4 (about 20–40× realtime, so the
 whole archive takes a few hours). The UZH ScienceCluster works the same way: `pip install -e ".[transcribe,convert]"` and
 run `gr-rag convert-model && gr-rag transcribe`. Copy `data/transcripts/` back afterwards.
 
-Intel-Mac caveats:
-* `convert-model` needs `torch`. The last torch release with Intel-Mac wheels is 2.2.x,
-  so it's easier to convert in Colab and copy `models/whisper-swiss-german-ct2/` to the Mac.
-* If `pip install faster-whisper` can't find a `ctranslate2` wheel for your macOS/Python,
-  try Python 3.11 or pin `ctranslate2==4.4.0`. Otherwise transcribe in Colab.
-* The chatbot itself (Ollama + 3B model) runs fine but answers take maybe 20–60 s on that CPU.
+Tips:
+* `convert-model` needs `torch`. If torch is hard to install on your machine, convert on the
+  cluster or in Colab and copy `models/whisper-swiss-german-ct2/` over.
+* If `pip install faster-whisper` can't find a `ctranslate2` wheel for your platform/Python,
+  try Python 3.11, or transcribe on the cluster.
+* The chatbot needs a machine that can run the LLM via Ollama; on a CPU-only machine, use a small
+  model (e.g. `qwen2.5:3b`) and expect slower answers.
 
 ## Notes
 

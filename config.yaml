@@ -10,7 +10,7 @@ scrape:
 
 transcribe:
   model_id: Flurin17/whisper-large-v3-turbo-swiss-german
-  # "faster-whisper" = CTranslate2, fastest on CPU (Intel Mac) and on GPU.
+  # "faster-whisper" = CTranslate2, fastest on CPU and on GPU.
   # "transformers"   = plain Hugging Face pipeline (needs torch).
   backend: faster-whisper
   ct2_dir: models/whisper-swiss-german-ct2   # created by `gr-rag convert-model`
@@ -35,6 +35,6 @@ retrieval:
   min_score: 0.45
 
 llm:
-  model: qwen2.5:3b           # 2017 Intel Mac: 3B is usable; try qwen2.5:7b with 16 GB RAM
+  model: qwen2.5:3b           # small and fast; use qwen2.5:7b or larger if the hardware allows
   temperature: 0.0
   num_ctx: 8192

@@ -26,7 +26,7 @@ echo "== scrape meeting list (≈5 min, polite delays)"
 [ -f data/meetings.json ] || gr-rag scrape --since 2023-01-01
 
 echo "== download audio (~30 MB per meeting-hour)"
-gr-rag download-audio || echo "!! YouTube download failed here - download on your Mac and copy data/audio/ over (see README)"
+gr-rag download-audio || echo "!! YouTube download failed here - download on another computer and copy data/audio/ over (see README)"
 
 echo "== prefetch Whisper weights into $HF_HOME"
 gr-rag prefetch-model

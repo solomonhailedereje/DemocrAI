@@ -8,13 +8,13 @@ Timestamps are what make citations possible: every answer links to the
 exact second in the YouTube recording.
 
 Two backends:
-  faster-whisper  CTranslate2, int8 on CPU. Best choice for an Intel Mac,
-                  also very fast on a CUDA GPU (Colab / ScienceCluster).
+  faster-whisper  CTranslate2: int8 on CPU, float16 on a CUDA GPU (Colab / ScienceCluster).
+                  Recommended.
   transformers    Plain Hugging Face pipeline. Simpler, needs torch.
 
 The faster-whisper backend is *resumable*: progress is flushed to disk
 every few minutes, and a restart continues where it stopped. That matters
-when a 4-hour meeting takes most of a night on a laptop CPU.
+when long meetings are transcribed in several sessions.
 """
 from __future__ import annotations
 
