@@ -51,7 +51,29 @@ ollama pull bge-m3
 ollama pull qwen2.5:3b        # 8 GB RAM. With 16 GB try qwen2.5:7b (better German, slower)
 ```
 
-## Run the pipeline
+## Keep it up to date: one command
+
+```bash
+gr-rag update
+```
+
+Runs every step but only for what's missing: new meetings → audio → transcription (if a GPU is
+available) → minutes/documents → search index (only new text is embedded) → summaries for new
+meetings. It ends with a short report and writes `data/last_update.json`. Useful options:
+
+```bash
+gr-rag update --skip transcribe          # on a machine without GPU
+gr-rag update --only index summaries     # after copying new transcripts back from the cluster
+gr-rag update --delete-audio             # remove audio once a meeting is fully transcribed
+```
+
+Monthly routine with the UZH cluster:
+
+1. On the cluster login node: `bash cluster/update.sh`. It fetches new meetings, audio and documents and
+   starts the GPU transcription job only if something is missing.
+2. When the job is done, copy `data/` to the app server and run `gr-rag update --only index summaries`.
+
+## Run the pipeline step by step
 
 ```bash
 gr-rag scrape --since 2023-01-01   # or no --since for all Protokolle back to 2004 (~5 min)

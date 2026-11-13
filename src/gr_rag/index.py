@@ -75,17 +75,40 @@ class BM25:
 
 # --------------------------------------------------------------------------- index
 
-def build_index(chunks: list[dict]) -> None:
+def build_index(chunks: list[dict], embed_fn=None, incremental: bool = True) -> dict:
+    """Write chunks + embeddings. With incremental=True, vectors of unchanged chunks
+    (same id and text, same embedding model) are reused, so an update only embeds new text."""
     p = paths().index
-    print(f"  embedding {len(chunks)} chunks with {load_config()['retrieval']['embed_model']} ...")
-    vecs = embed([c["text"] for c in chunks])
-    np.save(p / "embeddings.npy", vecs)
-    with open(p / "chunks.jsonl", "w", encoding="utf-8") as f:
+    embed_fn = embed_fn or embed
+    model = load_config()["retrieval"]["embed_model"]
+    reuse: dict[tuple[str, str], np.ndarray] = {}
+    meta_f, chunks_f, vec_f = p / "meta.json", p / "chunks.jsonl", p / "embeddings.npy"
+    if incremental and chunks_f.exists() and vec_f.exists() and meta_f.exists():
+        if json.loads(meta_f.read_text()).get("embed_model") == model:
+            old = [json.loads(l) for l in open(chunks_f, encoding="utf-8")]
+            old_vecs = np.load(vec_f)
+            if len(old) == len(old_vecs):
+                reuse = {(c["id"], c["text"]): v for c, v in zip(old, old_vecs)}
+
+    todo = [i for i, c in enumerate(chunks) if (c["id"], c["text"]) not in reuse]
+    print(f"  {len(chunks)} chunks: {len(chunks) - len(todo)} unchanged, embedding {len(todo)} new with {model} ...")
+    new_vecs = embed_fn([chunks[i]["text"] for i in todo]) if todo else np.zeros((0, 1), dtype=np.float32)
+    dim = new_vecs.shape[1] if len(todo) else (next(iter(reuse.values())).shape[0] if reuse else 1)
+    vecs = np.zeros((len(chunks), dim), dtype=np.float32)
+    k = 0
+    for i, c in enumerate(chunks):
+        if (c["id"], c["text"]) in reuse:
+            vecs[i] = reuse[(c["id"], c["text"])]
+        else:
+            vecs[i] = new_vecs[k]
+            k += 1
+    np.save(vec_f, vecs)
+    with open(chunks_f, "w", encoding="utf-8") as f:
         for c in chunks:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
-    (p / "meta.json").write_text(json.dumps({"embed_model": load_config()["retrieval"]["embed_model"],
-                                             "n_chunks": len(chunks)}))
-    print(f"\n  index saved to {p}")
+    meta_f.write_text(json.dumps({"embed_model": model, "n_chunks": len(chunks)}))
+    print(f"  index saved to {p}")
+    return {"total": len(chunks), "embedded": len(todo)}
 
 
 @dataclass

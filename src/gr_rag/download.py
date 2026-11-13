@@ -34,9 +34,13 @@ def download_audio(meeting_ids: list[str] | None = None) -> None:
             "noprogress": False,
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([f"https://www.youtube.com/watch?v={m['youtube_id']}"])
-
-
+            try:
+                try:
+                    ydl.download([f"https://www.youtube.com/watch?v={m['youtube_id']}"])
+                except Exception as e:
+                    print(f"  ! skipped {m['youtube_id']}: {str(e).splitlines()[0][:150]}")
+            except Exception as e:
+                print(f"  ! skipped {m['youtube_id']}: {str(e).splitlines()[0][:150]}")
 AUDIO_EXTS = (".m4a", ".webm", ".opus", ".mp3", ".wav", ".ogg")
 
 

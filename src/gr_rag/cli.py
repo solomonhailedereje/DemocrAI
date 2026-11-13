@@ -1,6 +1,11 @@
 """Command line entry point:  gr-rag <command>
 
-Pipeline (typical order):
+Everything at once (only new/missing items are processed):
+  gr-rag update                      # scrape, audio, transcribe (GPU), documents, index, summaries
+  gr-rag update --skip transcribe    # e.g. on a machine without GPU
+  gr-rag update --only index summaries
+
+Pipeline step by step (typical order):
   gr-rag scrape --since 2023-01-01   # meeting list, video links, documents, agenda
   gr-rag download-audio              # YouTube -> data/audio/<id>.m4a  (~30 MB per hour)
   gr-rag convert-model               # one-off: Whisper -> CTranslate2 (for faster-whisper)
@@ -35,6 +40,12 @@ def main() -> None:
     sub.add_parser("documents").add_argument("--protokolle-only", action="store_true")
     sub.add_parser("protokolle", help="alias for: documents --protokolle-only")
     sub.add_parser("build-index")
+    up = sub.add_parser("update", help="run all steps for new meetings")
+    up.add_argument("--since", help="earliest meeting date (default: keep current range, else 2023-01-01)")
+    up.add_argument("--only", nargs="+", choices=["scrape", "audio", "transcribe", "documents", "index", "summaries", "cleanup"])
+    up.add_argument("--skip", nargs="+", choices=["scrape", "audio", "transcribe", "documents", "index", "summaries", "cleanup"])
+    up.add_argument("--transcribe-on-cpu", action="store_true", help="transcribe even without GPU (very slow)")
+    up.add_argument("--delete-audio", action="store_true", help="delete audio of fully transcribed meetings")
     sm = sub.add_parser("summarize")
     sm.add_argument("--ids", nargs="*")
     sm.add_argument("--refresh", action="store_true")
@@ -78,6 +89,9 @@ def main() -> None:
         chunks = build_chunks()
         print("  ", dict(Counter(c["source_type"] for c in chunks)))
         build_index(chunks)
+    elif args.cmd == "update":
+        from .update import run_update
+        run_update(args.since, args.only, args.skip, args.transcribe_on_cpu, args.delete_audio)
     elif args.cmd == "summarize":
         from .summarize import summarize_all
         summarize_all(args.ids, args.refresh)
