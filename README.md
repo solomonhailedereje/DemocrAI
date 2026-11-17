@@ -112,8 +112,20 @@ scp -r <shortname>@cluster.s3it.uzh.ch:~/duebendorf-gr-rag/data/transcripts data
 ```
 
 **Alternatively, transcribe on another GPU and run everything else locally.**
-`notebooks/transcribe_colab.ipynb` does this on a free Colab T4 (about 20–40× realtime, so the
-whole archive takes a few hours). The UZH ScienceCluster works the same way: `pip install -e ".[transcribe,convert]"` and
+
+### Google Colab (free T4 GPU)
+
+[`notebooks/transcribe_colab.ipynb`](notebooks/transcribe_colab.ipynb) clones this repo and keeps only the data on Google Drive:
+
+1. On your computer, run `gr-rag scrape` and `gr-rag download-audio` (YouTube often blocks Colab's IPs).
+2. Upload `data/meetings.json` and the `data/audio/` folder to **MyDrive/DemocrAI-data/**.
+3. Open the notebook in Colab ([link](https://colab.research.google.com/github/solomonhailedereje/DemocrAI/blob/main/notebooks/transcribe_colab.ipynb)),
+   select *Runtime → Change runtime type → T4 GPU*, then *Run all*. It takes about 20–40× realtime,
+   so ~70 h of audio needs 2–4 h. If Colab disconnects, *Run all* again to resume.
+4. Download `MyDrive/DemocrAI-data/transcripts/` into `data/transcripts/` and run
+   `gr-rag update --only index summaries`.
+
+The UZH ScienceCluster or any other GPU machine works the same way: `pip install -e ".[transcribe,convert]"` and
 run `gr-rag convert-model && gr-rag transcribe`. Copy `data/transcripts/` back afterwards.
 
 Tips:

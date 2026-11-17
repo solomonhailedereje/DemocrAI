@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ratsarchiv-demo",
+      "runtimeExecutable": ".venv/bin/gr-rag",
+      "runtimeArgs": ["demo"],
+      "port": 8000
+    }
+  ]
+}
